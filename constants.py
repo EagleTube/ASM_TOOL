@@ -1,5 +1,10 @@
 from enum import Enum, auto
 from typing import Dict, List, Callable, Any, Tuple, Optional, Union
+from capstone import (
+    CS_ARCH_X86, CS_ARCH_ARM, CS_ARCH_ARM64, CS_ARCH_MIPS, CS_ARCH_PPC,
+    CS_MODE_16, CS_MODE_32, CS_MODE_64, CS_MODE_ARM, CS_MODE_THUMB,
+    CS_MODE_MIPS32, CS_MODE_MIPS64
+)
 
 MAX_SHELLCODE_SIZE = 4096
 DEFAULT_KEY = 0xAA
@@ -41,25 +46,25 @@ class ShellcodeType(Enum):
     STAGED = auto()
     CUSTOM = auto()
 
-CS_ARCHS: Dict[str, int] = {
-    "x86": 0,    # CS_ARCH_X86
-    "x64": 0,    # CS_ARCH_X86
-    "arm": 1,    # CS_ARCH_ARM
-    "arm64": 2,  # CS_ARCH_ARM64
-    "mips": 3,   # CS_ARCH_MIPS
-    "ppc": 4     # CS_ARCH_PPC
+CS_ARCHS = {
+    "x86": CS_ARCH_X86,
+    "x64": CS_ARCH_X86,  # still x86 arch, but with CS_MODE_64
+    "arm": CS_ARCH_ARM,
+    "arm64": CS_ARCH_ARM64,
+    "mips": CS_ARCH_MIPS,
+    "ppc": CS_ARCH_PPC
 }
 
-CS_MODES: Dict[str, int] = {
-    "16": 1 << 1,    # CS_MODE_16
-    "32": 1 << 2,    # CS_MODE_32
-    "64": 1 << 3,    # CS_MODE_64
-    "arm": 0,        # CS_MODE_ARM
-    "thumb": 1 << 4, # CS_MODE_THUMB
-    "mips32": 1 << 2,# CS_MODE_MIPS32
-    "mips64": 1 << 3,# CS_MODE_MIPS64
-    "ppc32": 1 << 2, # CS_MODE_32
-    "ppc64": 1 << 3  # CS_MODE_64
+CS_MODES = {
+    "16": CS_MODE_16,
+    "32": CS_MODE_32,
+    "64": CS_MODE_64,
+    "arm": CS_MODE_ARM,
+    "thumb": CS_MODE_THUMB,
+    "mips32": CS_MODE_MIPS32,
+    "mips64": CS_MODE_MIPS64,
+    "ppc32": CS_MODE_32,
+    "ppc64": CS_MODE_64
 }
 
 KS_ARCHS: Dict[str, int] = {
